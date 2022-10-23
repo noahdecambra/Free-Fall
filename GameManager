@@ -1,0 +1,144 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class GameManager : MonoBehaviour
+{
+    public GameObject player;
+    public static GameManager SharedInstance;
+    public List<GameObject> pooledObjects;
+    public GameObject objectToPool;
+    public int amountToPool;
+    int numActiveObj = 0;
+    public float spawnDelay = 0.5f;
+    private bool isProcGenExecuting = false;
+
+    private float startDelay = 5.7f;
+    public float camTran = 10f;
+    public Animator anim;
+    public Collider balloon;
+    public Camera camMain;
+    public Animator camAnim;
+
+    public CharacterCustomization ccustom;
+
+    void Awake()
+    {
+        SharedInstance = this;
+    }
+
+    // Start is called before the first frame update
+    void Start()
+    {
+        pooledObjects = new List<GameObject>();
+        GameObject tmp;
+        for(int i = 0; i < amountToPool; i++)
+        {
+            tmp = Instantiate(objectToPool);
+            tmp.SetActive(false);
+            pooledObjects.Add(tmp);
+        }
+
+        StartCoroutine(StartDelay(startDelay));
+
+        anim = player.GetComponent<Animator>();
+        camAnim = camMain.GetComponent<Animator>();
+    }
+
+    // Update is called once per frame
+    void Update()
+    {
+        if(anim.GetBool("startingAnim") == false)
+        {
+            StartCoroutine(PocGen(spawnDelay));
+            
+            CamTransition();
+        }        
+    }
+
+    void CamTransition()
+    {
+        camMain.GetComponent<CameraFollow>().enabled = true;
+    }
+
+    //Delay for beginning animation
+    IEnumerator StartDelay(float waiting)
+    {
+        yield return new WaitForSeconds(waiting);
+        balloon.enabled = !balloon.enabled;
+        anim.SetBool("startingAnim", false);
+        foreach (var customization in ccustom.Customizations)
+        {
+            customization.UpdateSubObjects();
+        }
+
+        FindObjectOfType<AudioManager>().Play("Wind");
+        FindObjectOfType<AudioManager>().Play("NylonFlapping");
+    }
+ 
+    //Counts each active platform in the hierarchy that is true
+    private int CountActive()
+    {
+        numActiveObj = 0;
+        foreach (GameObject platform in pooledObjects)
+        {
+            if(platform.activeSelf == true)
+            {
+                numActiveObj++;
+            }
+        }
+        return numActiveObj;        
+    }
+
+    //Creates new function to call from other scripts to be able to utilize the object pool
+    public GameObject GetPooledObject()
+    {
+        for(int i = 0; i < amountToPool; i++)
+        {
+            if(!pooledObjects[i].activeInHierarchy)
+            {
+                return pooledObjects[i];
+            }
+        }
+        return null;
+    }
+
+    //Procedurally generates platforms below the player from the pool
+    IEnumerator PocGen(float delay)
+    {
+        if(isProcGenExecuting)
+        {
+            yield break;
+        }
+        
+        isProcGenExecuting = true;
+
+        yield return new WaitForSeconds(delay);
+        GameObject platform = GameManager.SharedInstance.GetPooledObject();
+        Vector3 spawnPosition = new Vector3();
+
+        if(numActiveObj < 20 && platform != null)
+        {
+            if(player.transform.position.x > 7f)
+            {
+                spawnPosition.y -= Random.Range(22f, 25f) - player.transform.position.y;
+                spawnPosition.x = Random.Range(0f, 17.5f);
+            }
+            else if(player.transform.position.x < -7f)
+            {
+                spawnPosition.y -= Random.Range(22f, 25f) - player.transform.position.y;
+                spawnPosition.x = Random.Range(0f, -17.5f);
+            }
+            else
+            {
+                spawnPosition.y -= Random.Range(22f, 25f) - player.transform.position.y;
+                spawnPosition.x = Random.Range(-8f, 8f);
+            }           
+
+            platform.transform.position = spawnPosition;
+            platform.SetActive(true);
+            CountActive();
+        }
+        isProcGenExecuting = false;
+    }
+}
